@@ -42,6 +42,7 @@ dist/
 *.exp
 *.exe
 *.obj
+*.log
 
 # Python / 编辑器
 __pycache__/

@@ -6,6 +6,7 @@ dist/
 *.pdb
 *.ilk
 *.obj
+*.log
 *.tlog
 *.idb
 *.exp
