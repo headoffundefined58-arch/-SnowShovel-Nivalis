@@ -40,6 +40,8 @@ dist/
 *.tlog
 *.idb
 *.exp
+*.exe
+*.obj
 
 # Python / 编辑器
 __pycache__/
