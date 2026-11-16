@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "nivalis",
+  "version-string": "0.5.0",
+  "description": "SKSE plugin - snow-related gameplay. Dependencies mirror CommonLibSSE-NG 3.7.0.",
+  "builtin-baseline": "fc3f61366102c1f0d4547c06d03c523bb18c13a7",
+  "supports": "windows & x64",
+  "dependencies": [
+    { "name": "vcpkg-cmake-config", "host": true },
+    "rapidcsv",
+    "spdlog"
+  ]
+}

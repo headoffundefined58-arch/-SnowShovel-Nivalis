@@ -1,0 +1,24 @@
+# 构建产物（含 17MB 的 PDB，不上传）
+build2/
+build/
+build-se/
+dist/
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.idb
+*.exp
+
+# Python / 编辑器
+__pycache__/
+*.pyc
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store

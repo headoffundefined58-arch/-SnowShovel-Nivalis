@@ -1,0 +1,224 @@
+# SnowShovel / Nivalis 云端构建 —— 本机无 MSVC 时的正式出包路径。
+#
+# 根因回顾：旧版只编了 AE (ENABLE_SKYRIM_AE=ON + SKYRIM_SUPPORT_AE=1)。
+# CommonLibSSE-NG 的 REL::Module::GetRuntime() 在单运行时编译时是编译期常量，
+# AE-only 的 DLL 在 SE 1.5.97 上永远去找不存在的 versionlib-1-5-97-0.bin，
+# 弹窗后日志停在 "checking Nivalis.dll"。SE 与 AE 必须各出一个 DLL。
+#
+# 本工作流用 CMakeLists 的 NIVALIS_TARGET_RUNTIME=SE|AE 开关分别构建：
+#   SE -> 只开 ENABLE_SKYRIM_SE，绝不定义 SKYRIM_SUPPORT_AE
+#   AE -> 只开 ENABLE_SKYRIM_AE，并定义 SKYRIM_SUPPORT_AE=1
+#
+# 前置：把 CommonLibSSE-NG 放到 external/CommonLibSSE-NG（submodule 或随仓库提交），
+#       版本需与本机一致（vcpkg.json 标 3.7.0）。CMakeLists 的
+#       COMMONLIBSSE_NG_ROOT 缓存变量可改成别的路径。
+#
+# 触发：push main / 打 v* tag 出全量（SE + AE）；手动跑可选只编一个。
+
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      runtimes:
+        description: "构建哪些运行时"
+        type: choice
+        options: [se+ae, se, ae]
+        default: "se+ae"
+
+env:
+  PROJECT_TARGET: Nivalis
+  DIST: dist
+  BUILD_DIR: build
+  # CommonLibSSE-NG 随仓库提交到该路径，保证 CI 与本地验证版 ABI 完全一致
+  # （本地那份的 CMakeLists 哈希与官方 v3.6.0/v3.7.0 tag 均不同，是 main
+  #  分支的较新 commit，绝不能在 CI 上另拉 tag 混用）。
+  COMMONLIBSSE_PATH: external/CommonLibSSE-NG
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      se: ${{ steps.p.outputs.se }}
+      ae: ${{ steps.p.outputs.ae }}
+    steps:
+      - id: p
+        shell: bash
+        run: |
+          mode="${{ github.event.inputs.runtimes }}"
+          [ -z "$mode" ] && mode="se+ae"
+          echo "本次构建: $mode"
+          case "$mode" in
+            se)    echo "se=true"  >> $GITHUB_OUTPUT; echo "ae=false" >> $GITHUB_OUTPUT ;;
+            ae)    echo "se=false" >> $GITHUB_OUTPUT; echo "ae=true"  >> $GITHUB_OUTPUT ;;
+            se+ae) echo "se=true"  >> $GITHUB_OUTPUT; echo "ae=true"  >> $GITHUB_OUTPUT ;;
+            *)     echo "未知 runtimes: $mode"; exit 1 ;;
+          esac
+
+  build_se:
+    needs: plan
+    if: needs.plan.outputs.se == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: 校验 CommonLibSSE-NG 已随仓库提交
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${{ env.COMMONLIBSSE_PATH }}/CMakeLists.txt")) {
+            Write-Error "找不到 ${{ env.COMMONLIBSSE_PATH }}/CMakeLists.txt —— 请把本地验证过的 CommonLibSSE-NG 整个目录提交到该路径"
+            exit 1
+          }
+
+      - name: 去掉冲突的 proxy 环境变量
+        shell: pwsh
+        run: |
+          # MSBuild 环境字典大小写不敏感：HTTP_PROXY / http_proxy 并存会报 MSB6001
+          foreach ($n in 'HTTP_PROXY','http_proxy','HTTPS_PROXY','https_proxy','ALL_PROXY','all_proxy') {
+            if (Test-Path "env:$n") { Remove-Item "env:$n" }
+          }
+
+      - uses: lukka/run-vcpkg@v11
+        id: vcpkg
+        with:
+          runVcpkgInstall: true
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure (SE)
+        # VS 生成器自己解析工具链；不写死 VS 版本，不调 vcvars64.bat。
+        # SE 绝不定义 SKYRIM_SUPPORT_AE —— 否则 5 处布局分叉会按 AE 偏移编译。
+        run: >
+          cmake -B ${{ env.BUILD_DIR }} -S . -A x64
+          -DCMAKE_TOOLCHAIN_FILE=${{ steps.vcpkg.outputs.vcpkgRoot }}/scripts/buildsystems/vcpkg.cmake
+          -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
+          -DNIVALIS_TARGET_RUNTIME=SE
+          -DBUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
+
+      - name: 收产物到 dist/SE/SKSE/Plugins
+        shell: pwsh
+        run: |
+          $out = "$env:DIST/SE/SKSE/Plugins"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $dll = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.dll" -Path $env:BUILD_DIR | Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "找不到 $env:PROJECT_TARGET.dll，构建产物如下："
+            Get-ChildItem -Recurse -Include *.dll -Path $env:BUILD_DIR | Select-Object FullName
+            exit 1
+          }
+          Copy-Item $dll.FullName $out/
+          $pdb = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.pdb" -Path $env:BUILD_DIR | Select-Object -First 1
+          if ($pdb) { Copy-Item $pdb.FullName $out/ }
+          foreach ($cfg in @("Nivalis.ini", "config/Nivalis.ini")) {
+            if (Test-Path $cfg) { Copy-Item $cfg $out/ }
+          }
+          if (Test-Path "config/Nivalis") { Copy-Item -Recurse "config/Nivalis" $out/ }
+
+      - name: 校验 DLL
+        shell: bash
+        run: python scripts/check_plugin_dll.py "$DIST/SE/SKSE/Plugins/$PROJECT_TARGET.dll"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_TARGET }}-SE-1-5-97
+          path: ${{ env.DIST }}/SE
+          if-no-files-found: error
+
+  build_ae:
+    needs: plan
+    if: needs.plan.outputs.ae == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: 校验 CommonLibSSE-NG 已随仓库提交
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${{ env.COMMONLIBSSE_PATH }}/CMakeLists.txt")) {
+            Write-Error "找不到 ${{ env.COMMONLIBSSE_PATH }}/CMakeLists.txt —— 请把本地验证过的 CommonLibSSE-NG 整个目录提交到该路径"
+            exit 1
+          }
+
+      - name: 去掉冲突的 proxy 环境变量
+        shell: pwsh
+        run: |
+          foreach ($n in 'HTTP_PROXY','http_proxy','HTTPS_PROXY','https_proxy','ALL_PROXY','all_proxy') {
+            if (Test-Path "env:$n") { Remove-Item "env:$n" }
+          }
+
+      - uses: lukka/run-vcpkg@v11
+        id: vcpkg
+        with:
+          runVcpkgInstall: true
+          vcpkgJsonGlob: 'vcpkg.json'
+
+      - name: Configure (AE)
+        run: >
+          cmake -B ${{ env.BUILD_DIR }} -S . -A x64
+          -DCMAKE_TOOLCHAIN_FILE=${{ steps.vcpkg.outputs.vcpkgRoot }}/scripts/buildsystems/vcpkg.cmake
+          -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
+          -DNIVALIS_TARGET_RUNTIME=AE
+          -DBUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
+
+      - name: 收产物到 dist/SKSE/Plugins
+        shell: pwsh
+        run: |
+          $out = "$env:DIST/SKSE/Plugins"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $dll = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.dll" -Path $env:BUILD_DIR | Select-Object -First 1
+          if (-not $dll) {
+            Write-Error "找不到 $env:PROJECT_TARGET.dll"
+            exit 1
+          }
+          Copy-Item $dll.FullName $out/
+          $pdb = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.pdb" -Path $env:BUILD_DIR | Select-Object -First 1
+          if ($pdb) { Copy-Item $pdb.FullName $out/ }
+          foreach ($cfg in @("Nivalis.ini", "config/Nivalis.ini")) {
+            if (Test-Path $cfg) { Copy-Item $cfg $out/ }
+          }
+          if (Test-Path "config/Nivalis") { Copy-Item -Recurse "config/Nivalis" $out/ }
+
+      - name: 校验 DLL
+        shell: bash
+        run: python scripts/check_plugin_dll.py "$DIST/SKSE/Plugins/$PROJECT_TARGET.dll"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PROJECT_TARGET }}-AE-1-6-x
+          path: ${{ env.DIST }}
+          if-no-files-found: error
+
+  release:
+    needs: [build_se, build_ae]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.build_se.result == 'success' && needs.build_ae.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: 打包并上传 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd artifacts
+          for d in */; do
+            name="${d%/}"
+            (cd "$d" && zip -r "../../${name}.zip" . >/dev/null)
+          done
+          cd ..
+          ls -la ./*.zip
+          gh release create "$GITHUB_REF_NAME" ./*.zip --generate-notes 2>/dev/null || \
+          gh release upload "$GITHUB_REF_NAME" ./*.zip --clobber
