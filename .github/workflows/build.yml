@@ -94,7 +94,7 @@ jobs:
         # SE 绝不定义 SKYRIM_SUPPORT_AE —— 否则 5 处布局分叉会按 AE 偏移编译。
         run: >
           cmake -B ${{ env.BUILD_DIR }} -S . -A x64
-          -DCMAKE_TOOLCHAIN_FILE=${{ steps.vcpkg.outputs.vcpkgRoot }}/scripts/buildsystems/vcpkg.cmake
+          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
           -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
           -DNIVALIS_TARGET_RUNTIME=SE
           -DBUILD_TESTS=OFF
@@ -163,7 +163,7 @@ jobs:
       - name: Configure (AE)
         run: >
           cmake -B ${{ env.BUILD_DIR }} -S . -A x64
-          -DCMAKE_TOOLCHAIN_FILE=${{ steps.vcpkg.outputs.vcpkgRoot }}/scripts/buildsystems/vcpkg.cmake
+          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
           -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
           -DNIVALIS_TARGET_RUNTIME=AE
           -DBUILD_TESTS=OFF
