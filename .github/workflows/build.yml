@@ -34,6 +34,9 @@ env:
   PROJECT_TARGET: Nivalis
   DIST: dist
   BUILD_DIR: build
+  # 校验脚本会打印中文结论，Windows runner 默认 cp1252 会 UnicodeEncodeError
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
   # CommonLibSSE-NG 随仓库提交到该路径，保证 CI 与本地验证版 ABI 完全一致
   # （本地那份的 CMakeLists 哈希与官方 v3.6.0/v3.7.0 tag 均不同，是 main
   #  分支的较新 commit，绝不能在 CI 上另拉 tag 混用）。
