@@ -325,13 +325,13 @@ def main() -> None:
 
     # 给 GitHub 一点时间登记 run
     time.sleep(8)
-    run = wait_build(token, full, sha, args.timeout)
-    run_id = run["id"]
-    print(f"==> 构建结束: {run.get('conclusion')}  "
+    wf_run = wait_build(token, full, sha, args.timeout)
+    run_id = wf_run["id"]
+    print(f"==> 构建结束: {wf_run.get('conclusion')}  "
           f"https://github.com/{full}/actions/runs/{run_id}")
     show_jobs(token, full, run_id)
 
-    if run.get("conclusion") != "success":
+    if wf_run.get("conclusion") != "success":
         print("\n构建未成功，先看失败 job 的日志再重跑。", file=sys.stderr)
         raise SystemExit(4)
 
