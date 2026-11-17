@@ -45,6 +45,9 @@ DEFAULT_NAME = "SnowShovel-Nivalis"
 DIST = os.path.join(ROOT, "dist")
 ARTIFACTS = os.path.join(DIST, "artifacts")
 
+# 本机代理对 api.github.com 不稳定（502 Tunnel），统一直连。
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 # ---------------------------------------------------------------- token / api
 
@@ -85,7 +88,7 @@ def api(method: str, path: str, token: str, payload=None, allow=(200, 201, 204))
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with _OPENER.open(req, timeout=60) as r:
             body = r.read()
             status = r.status
     except urllib.error.HTTPError as e:
@@ -264,7 +267,7 @@ def download_zip(path: str, token: str, dest: str) -> None:
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None
 
-    opener = urllib.request.build_opener(NoRedirect)
+    opener = urllib.request.build_opener(NoRedirect, urllib.request.ProxyHandler({}))
     url = API + path
     req = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {token}",
@@ -280,7 +283,7 @@ def download_zip(path: str, token: str, dest: str) -> None:
             if not loc:
                 die(f"下载重定向缺少 Location: {path}")
             r2 = urllib.request.Request(loc, headers={"User-Agent": "snowshovel-cloud-build"})
-            with urllib.request.urlopen(r2, timeout=600) as resp:
+            with _OPENER.open(r2, timeout=600) as resp:
                 data = resp.read()
         else:
             die(f"下载失败 HTTP {e.code}: {path}\n{e.read()[:300].decode('utf-8', 'replace')}")
@@ -298,6 +301,11 @@ def main() -> None:
     ap.add_argument("--timeout", type=int, default=45, help="等待构建的分钟数（默认 45）")
     ap.add_argument("--no-wait", action="store_true", help="只推送，不等待构建")
     args = ap.parse_args()
+
+    # 本机代理对 GitHub API 会 502，全程直连
+    for k in list(os.environ):
+        if k.lower() in ("http_proxy", "https_proxy", "all_proxy"):
+            os.environ.pop(k, None)
 
     token = load_token()
     me = api("GET", "/user", token)
