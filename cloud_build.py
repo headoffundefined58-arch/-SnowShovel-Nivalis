@@ -61,10 +61,23 @@ def load_token() -> str:
             v = f.readline().strip()
             if v:
                 return v
+    # 兜底：向本机 git 凭据助手要一份（不落盘、不打印）
+    try:
+        p = subprocess.run(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n\n",
+            capture_output=True, text=True, timeout=60,
+            encoding="utf-8", errors="replace")
+        for line in (p.stdout or "").splitlines():
+            if line.startswith("password=") and len(line) > 20:
+                return line[len("password="):].strip()
+    except Exception:
+        pass
     die(
         "找不到 token。请任选其一：\n"
         "  1) 设置环境变量 GITHUB_TOKEN\n"
         f"  2) 在 {TOKEN_FILE} 里写一行 token\n"
+        "  3) 让本机 git 已登录 GitHub（脚本会用 git credential fill 取）\n"
         "token 需要 repo（以及 workflow）写权限。"
     )
 
