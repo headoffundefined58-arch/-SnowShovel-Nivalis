@@ -3,7 +3,7 @@
   "name": "nivalis",
   "version-string": "0.5.0",
   "description": "SKSE plugin - snow-related gameplay. Dependencies mirror CommonLibSSE-NG 3.7.0.",
-  "builtin-baseline": "fc3f61366102c1f0d4547c06d03c523bb18c13a7",
+  "builtin-baseline": "0df93a05b9de080129e653ec4776d7e14a1b2e4f",
   "supports": "windows & x64",
   "dependencies": [
     { "name": "vcpkg-cmake-config", "host": true },
