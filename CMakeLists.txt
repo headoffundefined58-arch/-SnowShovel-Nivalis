@@ -71,6 +71,13 @@ endif()
 
 message(STATUS "Nivalis target runtime: ${NIVALIS_TARGET_RUNTIME}")
 
+# rapidcsv 是 CommonLibSSE-NG 的硬依赖（src/REL/ID.cpp 解析地址库 CSV）。
+# vcpkg 的 rapidcsv 端口 cmake_minimum_required < 3.5，在 CI 的 CMake 4 上
+# 直接配置失败，所以改为把单头文件随仓库提供；NG 的 CMakeLists 正是通过
+# RAPIDCSV_INCLUDE_DIRS 找它，这里预置好让它的 find_path 直接采用。
+set(RAPIDCSV_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/external/rapidcsv" CACHE PATH
+    "Directory containing rapidcsv.h")
+
 add_subdirectory("${COMMONLIBSSE_NG_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/CommonLibSSE-NG")
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
