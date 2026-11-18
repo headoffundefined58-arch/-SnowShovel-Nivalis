@@ -113,10 +113,15 @@ jobs:
       - name: Build
         run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
 
-      - name: 收产物到 dist/SE/SKSE/Plugins
+      - name: 收产物到 dist/SE
         shell: pwsh
         run: |
-          $out = "$env:DIST/SE/SKSE/Plugins"
+          # package/ 是 Nexus 初版随包资源：ReadMe、Nivalis.ini、phases.yml、
+          # 动态血池 profile JSON 与两张水洼贴图。SE/AE 必须都带上。
+          $root = "$env:DIST/SE"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Copy-Item -Path "package/*" -Destination $root -Recurse -Force
+          $out = "$root/SKSE/Plugins"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $dll = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.dll" -Path $env:BUILD_DIR | Select-Object -First 1
           if (-not $dll) {
@@ -127,10 +132,23 @@ jobs:
           Copy-Item $dll.FullName $out/
           $pdb = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.pdb" -Path $env:BUILD_DIR | Select-Object -First 1
           if ($pdb) { Copy-Item $pdb.FullName $out/ }
-          foreach ($cfg in @("Nivalis.ini", "config/Nivalis.ini")) {
-            if (Test-Path $cfg) { Copy-Item $cfg $out/ }
+
+      - name: 校验随包资源
+        shell: pwsh
+        run: |
+          $root = "$env:DIST/SE"
+          $need = @(
+            "SKSE/Plugins/Nivalis.dll",
+            "SKSE/Plugins/Nivalis.ini",
+            "SKSE/Plugins/Nivalis/phases.yml",
+            "SKSE/DynamicBloodpoolFramework/NivalisWater.json",
+            "Textures/DynamicBloodpoolFramework/NivalisWater.dds",
+            "Textures/DynamicBloodpoolFramework/NivalisWater_n.dds",
+            "ReadMe.txt"
+          )
+          foreach ($f in $need) {
+            if (-not (Test-Path (Join-Path $root $f))) { Write-Error "缺产物: $f"; exit 1 }
           }
-          if (Test-Path "config/Nivalis") { Copy-Item -Recurse "config/Nivalis" $out/ }
 
       - name: 校验 DLL
         shell: bash
@@ -184,10 +202,15 @@ jobs:
       - name: Build
         run: cmake --build ${{ env.BUILD_DIR }} --config Release --parallel
 
-      - name: 收产物到 dist/SKSE/Plugins
+      - name: 收产物到 dist
         shell: pwsh
         run: |
-          $out = "$env:DIST/SKSE/Plugins"
+          # package/ 是 Nexus 初版随包资源：ReadMe、Nivalis.ini、phases.yml、
+          # 动态血池 profile JSON 与两张水洼贴图。SE/AE 必须都带上。
+          $root = "$env:DIST"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          Copy-Item -Path "package/*" -Destination $root -Recurse -Force
+          $out = "$root/SKSE/Plugins"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $dll = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.dll" -Path $env:BUILD_DIR | Select-Object -First 1
           if (-not $dll) {
@@ -197,10 +220,23 @@ jobs:
           Copy-Item $dll.FullName $out/
           $pdb = Get-ChildItem -Recurse -Filter "$env:PROJECT_TARGET.pdb" -Path $env:BUILD_DIR | Select-Object -First 1
           if ($pdb) { Copy-Item $pdb.FullName $out/ }
-          foreach ($cfg in @("Nivalis.ini", "config/Nivalis.ini")) {
-            if (Test-Path $cfg) { Copy-Item $cfg $out/ }
+
+      - name: 校验随包资源
+        shell: pwsh
+        run: |
+          $root = "$env:DIST"
+          $need = @(
+            "SKSE/Plugins/Nivalis.dll",
+            "SKSE/Plugins/Nivalis.ini",
+            "SKSE/Plugins/Nivalis/phases.yml",
+            "SKSE/DynamicBloodpoolFramework/NivalisWater.json",
+            "Textures/DynamicBloodpoolFramework/NivalisWater.dds",
+            "Textures/DynamicBloodpoolFramework/NivalisWater_n.dds",
+            "ReadMe.txt"
+          )
+          foreach ($f in $need) {
+            if (-not (Test-Path (Join-Path $root $f))) { Write-Error "缺产物: $f"; exit 1 }
           }
-          if (Test-Path "config/Nivalis") { Copy-Item -Recurse "config/Nivalis" $out/ }
 
       - name: 校验 DLL
         shell: bash

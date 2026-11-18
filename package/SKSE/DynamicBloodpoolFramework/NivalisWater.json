@@ -1,0 +1,31 @@
+{
+	"PoolProfilesMapping": [
+		{
+			"ProfileID": "NivalisMelt",
+			"Priority": 0,
+			"Variants": [
+				{
+					"Method": "Scaling",
+					"Model": "DynamicBloodpoolFramework\\DynamicDecal-Puddle.nif",
+					"SizeRange": [0.6, 1.3],
+					"Duration": 240.0,
+					"EasePower": 2.0,
+					"EaseMidpoint": 0.5,
+					"DurationMultRange": [0.85, 1.25],
+					"TextureSet": {
+						"Diffuse": "DynamicBloodpoolFramework\\NivalisWater.dds",
+						"Normal": "DynamicBloodpoolFramework\\NivalisWater_n.dds"
+					},
+					"Shaders": {
+						"Type": "Default",
+						"Alpha": 0.85,
+						"Tint": "4C7A8C",
+						"SpecularColor": "C8DCE4",
+						"SpecularStrength": 0.55,
+						"Glossiness": 210.0
+					}
+				}
+			]
+		}
+	]
+}
