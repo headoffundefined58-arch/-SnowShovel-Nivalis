@@ -34,6 +34,12 @@ env:
   PROJECT_TARGET: Nivalis
   DIST: dist
   BUILD_DIR: build
+  # vcpkg 的 x64-windows 默认把 spdlog/fmt 编译成动态库：产物会带
+  # spdlog.dll + fmt.dll 依赖，但 dist 里只装 Nivalis.dll，玩家机器上
+  # 没有这两个 DLL 时 SKSE 直接报 Error 126，DLL 根本进不了菜单注册。
+  # x64-windows-static-md = 静态库 + 动态 CRT，与 CMakeLists 的
+  # MultiThreadedDLL(/MD) 一致，产物只剩系统库依赖。
+  VCPKG_TRIPLET: x64-windows-static-md
   # 校验脚本会打印中文结论，Windows runner 默认 cp1252 会 UnicodeEncodeError
   PYTHONIOENCODING: utf-8
   PYTHONUTF8: "1"
@@ -98,6 +104,8 @@ jobs:
         run: >
           cmake -B ${{ env.BUILD_DIR }} -S . -A x64
           -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TRIPLET }}
+          -DVCPKG_HOST_TRIPLET=${{ env.VCPKG_TRIPLET }}
           -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
           -DNIVALIS_TARGET_RUNTIME=SE
           -DBUILD_TESTS=OFF
@@ -167,6 +175,8 @@ jobs:
         run: >
           cmake -B ${{ env.BUILD_DIR }} -S . -A x64
           -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+          -DVCPKG_TARGET_TRIPLET=${{ env.VCPKG_TRIPLET }}
+          -DVCPKG_HOST_TRIPLET=${{ env.VCPKG_TRIPLET }}
           -DCOMMONLIBSSE_NG_ROOT=${{ github.workspace }}/${{ env.COMMONLIBSSE_PATH }}
           -DNIVALIS_TARGET_RUNTIME=AE
           -DBUILD_TESTS=OFF

@@ -8,6 +8,7 @@
     python check_plugin_dll.py X.dll --json
 
 退出码: 0 = 能当插件用（可能带警告）; 1 = 一定不会被 SKSE 加载
+         （包括缺非系统 DLL 依赖：LoadLibrary 报 Error 126，菜单根本不会注册）
 """
 from __future__ import annotations
 
@@ -17,6 +18,31 @@ import struct
 import sys
 
 MACHINE = {0x8664: "x64", 0x14C: "x86", 0xAA64: "arm64"}
+
+# 这些是玩家机器上必然存在的 Windows / VC++ 运行库。除此之外 DLL 只要
+# 再引用一个文件（spdlog.dll / fmt.dll / imgui.dll ...），SKSE 就会在
+# LoadLibrary 阶段失败，日志里只剩 "couldn't load plugin ... (Error 126)"。
+SYSTEM_DLLS = {
+    "ntdll.dll", "kernel32.dll", "kernelbase.dll", "user32.dll", "gdi32.dll",
+    "gdiplus.dll", "advapi32.dll", "shell32.dll", "shlwapi.dll", "ole32.dll",
+    "oleaut32.dll", "comctl32.dll", "comdlg32.dll", "version.dll", "winmm.dll",
+    "ws2_32.dll", "wsock32.dll", "crypt32.dll", "bcrypt.dll", "secur32.dll",
+    "iphlpapi.dll", "userenv.dll", "setupapi.dll", "cfgmgr32.dll",
+    "dbghelp.dll", "psapi.dll", "imm32.dll", "msimg32.dll", "dwmapi.dll",
+    "uxtheme.dll", "winhttp.dll", "wininet.dll", "urlmon.dll", "msvcrt.dll",
+    "d3d11.dll", "dxgi.dll", "d2d1.dll", "dwrite.dll",
+    # SMF 自带/Windows 自带的 D3D 编译器，属于可直接依赖的运行时
+    "d3dcompiler_47.dll", "d3dcompiler_43.dll", "xinput1_3.dll",
+    "xinput9_1_0.dll", "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",
+    "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll",
+    "vcruntime140.dll", "vcruntime140_1.dll", "ucrtbase.dll", "concrt140.dll",
+}
+
+
+def is_system_dll(name: str) -> bool:
+    low = name.lower()
+    return (low in SYSTEM_DLLS or low.startswith("api-ms-win-")
+            or low.startswith("ext-ms-win-"))
 
 
 def u16(b, o):
@@ -90,6 +116,31 @@ class PE:
             out.append(self.d[p:end].decode("latin-1"))
         return out
 
+    def imports(self):
+        """IMAGE_DIRECTORY_ENTRY_IMPORT 里所有 DLL 名（导入表，不是 delay-load）。"""
+        if len(self.dirs) <= 1 or self.dirs[1][0] == 0:
+            return []
+        o = self.off(self.dirs[1][0])
+        if o is None:
+            return []
+        out = []
+        # IMAGE_IMPORT_DESCRIPTOR: 5 x DWORD，Name 在偏移 12；全 0 结束。
+        for i in range(512):
+            e = o + i * 20
+            if e + 20 > len(self.d):
+                break
+            name_rva = u32(self.d, e + 12)
+            if name_rva == 0:
+                break
+            p = self.off(name_rva)
+            if p is None:
+                continue
+            end = self.d.find(b"\0", p)
+            if end < 0 or end - p > 260:
+                continue
+            out.append(self.d[p:end].decode("latin-1"))
+        return out
+
     def has_codeview(self):
         """调试目录里有没有 CodeView(RSDS) —— 没有就永远配不上 .pdb。"""
         if len(self.dirs) <= 6 or self.dirs[6][0] == 0:
@@ -132,6 +183,16 @@ def check(path: str):
         warns.append("既没有 SKSEPlugin_Query 也没有 SKSEPlugin_Version"
                      "（NG 插件通常不需要，但老式插件缺了会不加载）")
 
+    imports = pe.imports()
+    foreign = sorted({n for n in imports if not is_system_dll(n)})
+    if foreign:
+        errs.append(
+            "存在非系统 DLL 依赖: " + ", ".join(foreign) +
+            " —— 玩家机器上没有这些文件时 SKSE 报 Error 126，插件根本不加载，"
+            "SMF 设置页也不会出现。请使用静态链接（vcpkg: x64-windows-static-md）"
+            "或把这些 DLL 一起放进 SKSE/Plugins。"
+        )
+
     cv = pe.has_codeview()
     if not cv:
         warns.append("没有 CodeView(RSDS) —— 这个 DLL 的崩溃地址无法符号化，"
@@ -146,6 +207,7 @@ def check(path: str):
     ok = not errs
     return {"path": path, "ok": ok, "arch": arch, "size": len(data),
             "exports_skse": [e for e in exps if e.lower().startswith("skseplugin")],
+            "imports": imports, "foreign_imports": foreign,
             "codeview": cv, "errors": errs, "warnings": warns, "notes": notes}
 
 
@@ -166,6 +228,7 @@ def main(argv):
                 print(f"  架构 {r['arch']}   大小 {r['size']:,} 字节   "
                       f"CodeView {'有' if r['codeview'] else '无'}")
                 print(f"  SKSE 导出: {', '.join(r['exports_skse']) or '(无)'}")
+                print(f"  DLL 依赖: {', '.join(r.get('imports', [])) or '(无)'}")
             for e in r["errors"]:
                 print(f"  [错误] {e}")
             for w in r["warnings"]:

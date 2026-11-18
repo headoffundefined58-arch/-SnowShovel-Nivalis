@@ -24,6 +24,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8 /EHsc /permissive-")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi /FS")
 set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG:FULL")
 
+# IMPORTANT: spdlog/fmt MUST be linked statically into the plugin. A DLL that
+# imports spdlog.dll/fmt.dll cannot be loaded by SKSE (Error 126: module not
+# found) on a clean install, and the SMF menu never registers. With vcpkg use
+# -DVCPKG_TARGET_TRIPLET=x64-windows-static-md -DVCPKG_HOST_TRIPLET=... .
+#
 # Header-only spdlog assembled under D:/dev/deps (no vcpkg needed).
 # On CI / another machine pass -DCMAKE_PREFIX_PATH=<spdlog prefix> instead.
 if(EXISTS "D:/dev/deps/lib/cmake/spdlog")
